@@ -29,8 +29,10 @@
 #include <rfb/screenTypes.h>
 #include <rfb/LogWriter.h>
 #include <RandrGlue.h>
+// 日志相关的
 static rfb::LogWriter vlog("RandR");
 
+//看函数名是调整屏幕大小的函数
 static int ResizeScreen(bool dryrun, int fb_width, int fb_height,
                         std::set<unsigned int>* disabledOutputs)
 {
@@ -59,9 +61,11 @@ static int ResizeScreen(bool dryrun, int fb_width, int fb_height,
   if (!vncRandRIsValidScreenSize(fb_width, fb_height))
     return 0;
 
+  // 直接返回1了？
   if (dryrun)
     return 1;
 
+  // 检查通过执行操作，成功返回1
   return vncRandRResizeScreen(fb_width, fb_height);
 }
 
@@ -70,6 +74,7 @@ static int ResizeScreen(bool dryrun, int fb_width, int fb_height,
 int getPreferredScreenOutput(OutputIdMap *outputIdMap,
                              const std::set<unsigned int>& disabledOutputs)
 {
+  // 四个状态的flag
   int firstDisabled = -1;
   int firstEnabled = -1;
   int firstConnected = -1;
@@ -131,17 +136,23 @@ rfb::ScreenSet computeScreenLayout(OutputIdMap *outputIdMap)
     if (!vncRandRIsOutputEnabled(i))
       continue;
 
+    // 拿ID
     outputId = vncRandRGetOutputId(i);
 
     /* Known output? */
+    // output的map中是否存在该KEY-outputId对应的value
     if (outputIdMap->count(outputId) == 1)
+      // newIdMap直接拷贝
       newIdMap[outputId] = (*outputIdMap)[outputId];
     else {
       uint32_t id;
       OutputIdMap::const_iterator iter;
 
+      
       while (true) {
+        // 随机生成的value
         id = rand();
+        // 遍历整个OutputIdMap，校验生成的id是否在outputIdMap的value中已经存在
         for (iter = outputIdMap->begin();iter != outputIdMap->end();++iter) {
           if (iter->second == id)
             break;
@@ -150,10 +161,12 @@ rfb::ScreenSet computeScreenLayout(OutputIdMap *outputIdMap)
           break;
       }
 
+      // 用随机生成的id作为outputId(key)的value
       newIdMap[outputId] = id;
     }
 
     if (vncRandRGetOutputDimensions(i, &x, &y, &width, &height) == 0) {
+      // 没找到直接add一个screen？
       layout.add_screen(rfb::Screen(newIdMap[outputId], x, y, width, height, 0));
     }
   }
@@ -180,6 +193,7 @@ static unsigned int _setScreenLayout(bool dryrun,
   int availableOutputs;
   std::set<unsigned int> disabledOutputs;
   /* Printing errors in the dryrun pass might be confusing */
+  // dryrun pass 中的打印错误可能会令人困惑
   const bool logErrors = !dryrun || vlog.getLevel() >= vlog.LEVEL_DEBUG;
 
   // RandR support?
@@ -190,6 +204,7 @@ static unsigned int _setScreenLayout(bool dryrun,
    * First check that we don't have any active clone modes. That's just
    * too messy to deal with.
    */
+  // 首先检查我们没有任何活动的clone mode。那只是太乱了，不好处理。
   if (vncRandRHasOutputClones()) {
     if (logErrors) {
       vlog.error("Clone mode active. Refusing to touch screen layout.");
@@ -198,9 +213,11 @@ static unsigned int _setScreenLayout(bool dryrun,
   }
 
   /* Next count how many useful outputs we have... */
+  // 接下来计算我们有多少有用的output
   availableOutputs = vncRandRGetAvailableOutputs();
 
   /* Try to create more outputs if needed... (only works on Xvnc) */
+  // 如果需要，尝试创建更多output...（仅适用于 Xvnc）
   if (layout.num_screens() > availableOutputs) {
     vlog.debug("Insufficient screens. Need to create %d more.",
                layout.num_screens() - availableOutputs);
@@ -222,6 +239,7 @@ static unsigned int _setScreenLayout(bool dryrun,
   }
 
   /* First we might need to resize the screen */
+  // 首先我们可能需要调整screen大小
   if ((fb_width != vncGetScreenWidth()) ||
       (fb_height != vncGetScreenHeight())) {
     ret = ResizeScreen(dryrun, fb_width, fb_height, &disabledOutputs);
@@ -234,6 +252,7 @@ static unsigned int _setScreenLayout(bool dryrun,
   }
 
   /* Next, reconfigure all known outputs */
+  // 接下来，重新配置所有已知输出
   for (int i = 0;i < vncRandRGetOutputCount();i++) {
     unsigned int output;
 
@@ -242,22 +261,26 @@ static unsigned int _setScreenLayout(bool dryrun,
     output = vncRandRGetOutputId(i);
 
     /* Known? */
+    // 已经存在的output
     if (outputIdMap->count(output) == 0)
       continue;
 
     /* Find the corresponding screen... */
+    // 找到对应的screen
     for (iter = layout.begin();iter != layout.end();++iter) {
       if (iter->id == (*outputIdMap)[output])
         break;
     }
 
     /* Missing? */
+    // 不存在该screen？那就干掉对应的output
     if (iter == layout.end()) {
       outputIdMap->erase(output);
       continue;
     }
 
     /* Probably not needed, but let's be safe */
+    // 可能不需要，但我们要安全
     if (!vncRandRIsOutputUsable(i)) {
       if (logErrors) {
         char *name = vncRandRGetOutputName(i);
@@ -268,6 +291,7 @@ static unsigned int _setScreenLayout(bool dryrun,
     }
 
     /* Possible mode? */
+    // 检查mode状态
     if (!vncRandRCheckOutputMode(i, iter->dimensions.width(),
                                  iter->dimensions.height())) {
       if (logErrors) {
@@ -279,6 +303,7 @@ static unsigned int _setScreenLayout(bool dryrun,
       return rfb::resultInvalid;
     }
 
+    // ouput更改的状态打印
     char *name = vncRandRGetOutputName(i);
     vlog.debug("Reconfiguring output '%s' to %dx%d+%d+%d", name,
                iter->dimensions.width(), iter->dimensions.height(),
@@ -289,6 +314,7 @@ static unsigned int _setScreenLayout(bool dryrun,
       continue;
 
     /* Reconfigure new mode and position */
+    // 重新配置output的mode和position
     ret = vncRandRReconfigureOutput(i,
                                     iter->dimensions.tl.x,
                                     iter->dimensions.tl.y,
@@ -307,13 +333,16 @@ static unsigned int _setScreenLayout(bool dryrun,
   }
 
   /* Allocate new outputs for new screens */
+  // 为新的screen分配output
   rfb::ScreenSet::const_iterator iter;
+  // 遍历screenSet
   for (iter = layout.begin();iter != layout.end();++iter) {
     OutputIdMap::const_iterator oi;
     unsigned int output;
     int i;
 
     /* Does this screen have an output already? */
+    // screen是否已经存在output
     for (oi = outputIdMap->begin();oi != outputIdMap->end();++oi) {
       if (oi->second == iter->id)
         break;
@@ -323,9 +352,11 @@ static unsigned int _setScreenLayout(bool dryrun,
       continue;
 
     /* Find an unused output */
+    // 找一个没使用的output
     i = getPreferredScreenOutput(outputIdMap, disabledOutputs);
 
     /* Shouldn't happen */
+    // 找不到output
     if (i == -1) {
       if (logErrors)
         vlog.error("Cannot find an available output for new screen layout");
@@ -338,9 +369,12 @@ static unsigned int _setScreenLayout(bool dryrun,
      * computeScreenLayout() will think it is a brand new output and
      * assign it a random id.
      */
+    // 将output作为key，ScreenSet的id作为value添加（或者覆盖）到outputIdMap中
+    // 因为是unused output，outputIdMap中存在也需要直接覆盖掉
     (*outputIdMap)[output] = iter->id;
 
     /* Probably not needed, but let's be safe */
+    // 可能不需要，但我们要安全
     if (!vncRandRIsOutputUsable(i)) {
       if (logErrors) {
         char *name = vncRandRGetOutputName(i);
@@ -351,6 +385,7 @@ static unsigned int _setScreenLayout(bool dryrun,
     }
 
     /* Possible mode? */
+    // 检查mode状态
     if (!vncRandRCheckOutputMode(i, iter->dimensions.width(),
                                  iter->dimensions.height())) {
       if (logErrors) {
@@ -362,16 +397,19 @@ static unsigned int _setScreenLayout(bool dryrun,
       return rfb::resultInvalid;
     }
 
+    // output状态更改的打印
     char *name = vncRandRGetOutputName(i);
     vlog.debug("Reconfiguring new output '%s' to %dx%d+%d+%d", name,
                iter->dimensions.width(), iter->dimensions.height(),
                iter->dimensions.tl.x, iter->dimensions.tl.y);
     free(name);
 
+    // dryrun为真，跳过该次遍历
     if (dryrun)
       continue;
 
     /* Reconfigure new mode and position */
+    // 重新配置output的mode和position
     ret = vncRandRReconfigureOutput(i,
                                     iter->dimensions.tl.x,
                                     iter->dimensions.tl.y,
