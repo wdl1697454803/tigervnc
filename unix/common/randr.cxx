@@ -428,10 +428,12 @@ static unsigned int _setScreenLayout(bool dryrun,
   }
 
   /* Turn off unused outputs */
+  // 关闭所有unused的outputs
   for (int i = 0;i < vncRandRGetOutputCount();i++) {
     unsigned int output = vncRandRGetOutputId(i);
 
     /* Known? */
+    // 是否为已存在的output
     if (outputIdMap->count(output) == 1)
       continue;
 
@@ -459,6 +461,7 @@ static unsigned int _setScreenLayout(bool dryrun,
    * This is normally done in the X11 request handlers, which is
    * why we have to deal with it manually here.
    */
+  // 更新屏幕布局最后更改时间的时间戳。这通常在 X11 请求处理程序中完成，这就是我们必须在此处手动处理的原因。
   vncRandRUpdateSetTime();
 
   return rfb::resultSuccess;
