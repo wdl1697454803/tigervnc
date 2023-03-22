@@ -29,6 +29,7 @@
 //
 // Image class is an Xlib-based implementation of screen image storage.
 //
+// Image 类是基于 Xlib 的屏幕图像存储实现。
 
 class Image {
 
@@ -50,6 +51,7 @@ public:
                    int dst_x = 0, int dst_y = 0);
 
   // Copying pixels from one image to another.
+  // 将像素从一幅图像复制到另一幅图像。
   virtual void updateRect(XImage *src, int dst_x = 0, int dst_y = 0);
   virtual void updateRect(Image *src, int dst_x = 0, int dst_y = 0);
   virtual void updateRect(XImage *src, int dst_x, int dst_y, int w, int h);
@@ -62,6 +64,8 @@ public:
   // Pointer to corresponding XImage, made public for efficiency.
   // NOTE: if this field is NULL, then no methods other than Init()
   //       may be called.
+  // 指向相应 XImage 的指针，为提高效率而设置为public。
+  // 注意：如果该字段为 NULL，则除 Init() 之外的任何方法都不会被调用。
   XImage *xim;
 
   // Get a pointer to the data corresponding to the given coordinates.
@@ -87,7 +91,7 @@ protected:
 //
 // ShmImage uses MIT-SHM extension of an X server to get image data.
 //
-
+// ShmImage 使用 X 服务器的 MIT-SHM 扩展来获取图像数据。
 #include <X11/extensions/XShm.h>
 
 class ShmImage : public Image {
@@ -122,6 +126,9 @@ protected:
 // objects that are most appropriate for current X server and user
 // settings.
 //
+// ImageFactory 类用于生成 Image-derived 的实例
+// 最适合当前 X 服务器和用户的对象
+// 设置。
 
 class ImageFactory {
 

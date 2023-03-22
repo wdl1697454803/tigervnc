@@ -33,6 +33,10 @@ using namespace rfb;
 
 static LogWriter vlog("Geometry");
 
+// 显示给 VNC clients的屏幕区域。
+// 格式为<width>x<height>+<offset_x>+<offset_y>,
+// 更多信息参见 man X，几何规格部分。
+// 如果参数为空，则全屏显示给 VNC clients。
 StringParameter Geometry::m_geometryParam("Geometry",
   "Screen area shown to VNC clients. "
   "Format is <width>x<height>+<offset_x>+<offset_y>, "
@@ -52,6 +56,7 @@ void Geometry::recalc(int fullWidth, int fullHeight)
   m_rect.setXYWH(0, 0, fullWidth, fullHeight);
 
   // Parse geometry specification and save the result in m_rect.
+  // 解析几何规范并将结果保存在 m_rect 中。
   const char *param = m_geometryParam;
   bool geometrySpecified = (strlen(param) > 0);
   if (geometrySpecified) {
@@ -69,6 +74,7 @@ void Geometry::recalc(int fullWidth, int fullHeight)
 
 Rect Geometry::parseString(const char *arg) const
 {
+  // 默认返回空
   Rect result;                  // empty by default
 
   if (arg != NULL && strlen(arg) > 0) {

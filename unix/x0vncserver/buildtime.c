@@ -15,4 +15,5 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307,
  * USA.
  */
+// 记录build时间的数组？
 char buildtime[] = __DATE__ " " __TIME__;

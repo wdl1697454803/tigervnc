@@ -38,6 +38,7 @@ unsigned int tryScreenLayout(int fb_width, int fb_height, const rfb::ScreenSet& 
  * FIXME: This is only exposed because we still have logic in XDesktop
  *        that we haven't integrated in setScreenLayout()
  */
+// FIXME：这只是暴露的，因为我们在 XDesktop 中仍然有逻辑我们还没有集成到 setScreenLayout()
 int getPreferredScreenOutput(OutputIdMap *outputIdMap,
                              const std::set<unsigned int>& disabledOutputs);
 
