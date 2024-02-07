@@ -28,6 +28,7 @@
 #include <rfb/Encoder.h>
 #include <rfb/Exception.h>
 #include <rfb/KeyRemapper.h>
+#include <rfb/KeysymStr.h>
 #include <rfb/LogWriter.h>
 #include <rfb/Security.h>
 #include <rfb/ServerCore.h>
@@ -81,6 +82,9 @@ VNCSConnectionST::~VNCSConnectionST()
     vlog.info("closing %s: %s", peerEndpoint.c_str(),
               closeReason.c_str());
 
+  // Release any mouse buttons
+  server->pointerEvent(this, server->getCursorPos(), 0);
+
   // Release any keys the client still had pressed
   while (!pressedKeys.empty()) {
     uint32_t keysym, keycode;
@@ -89,8 +93,8 @@ VNCSConnectionST::~VNCSConnectionST()
     keycode = pressedKeys.begin()->first;
     pressedKeys.erase(pressedKeys.begin());
 
-    vlog.debug("Releasing key 0x%x / 0x%x on client disconnect",
-               keysym, keycode);
+    vlog.debug("Releasing key 0x%04x / XK_%s (0x%04x) on client disconnect",
+               keycode, KeySymName(keysym), keysym);
     server->keyEvent(keysym, keycode, false);
   }
 
@@ -514,9 +518,11 @@ void VNCSConnectionST::keyEvent(uint32_t keysym, uint32_t keycode, bool down) {
   if (!rfb::Server::acceptKeyEvents) return;
 
   if (down)
-    vlog.debug("Key pressed: 0x%x / 0x%x", keysym, keycode);
+    vlog.debug("Key pressed: 0x%04x / XK_%s (0x%04x)",
+               keycode, KeySymName(keysym), keysym);
   else
-    vlog.debug("Key released: 0x%x / 0x%x", keysym, keycode);
+    vlog.debug("Key released: 0x%04x / XK_%s (0x%04x)",
+               keycode, KeySymName(keysym), keysym);
 
   // Avoid lock keys if we don't know the server state
   if ((server->getLEDState() == ledUnknown) &&
@@ -672,7 +678,7 @@ void VNCSConnectionST::setDesktopSize(int fb_width, int fb_height,
   writer()->writeDesktopSize(reasonClient, result);
 }
 
-void VNCSConnectionST::fence(uint32_t flags, unsigned len, const char data[])
+void VNCSConnectionST::fence(uint32_t flags, unsigned len, const uint8_t data[])
 {
   uint8_t type;
 
@@ -685,7 +691,7 @@ void VNCSConnectionST::fence(uint32_t flags, unsigned len, const char data[])
       delete [] fenceData;
       fenceData = NULL;
       if (len > 0) {
-        fenceData = new char[len];
+        fenceData = new uint8_t[len];
         memcpy(fenceData, data, len);
       }
 
@@ -771,7 +777,7 @@ void VNCSConnectionST::supportsLocalCursor()
 
 void VNCSConnectionST::supportsFence()
 {
-  char type = 0;
+  uint8_t type = 0;
   writer()->writeFence(fenceFlagRequest, sizeof(type), &type);
 }
 
@@ -825,7 +831,7 @@ bool VNCSConnectionST::isShiftPressed()
 
 void VNCSConnectionST::writeRTTPing()
 {
-  char type;
+  uint8_t type;
 
   if (!client.supportsFence())
     return;

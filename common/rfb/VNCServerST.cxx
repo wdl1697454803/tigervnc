@@ -58,6 +58,7 @@
 #include <rfb/ComparingUpdateTracker.h>
 #include <rfb/Exception.h>
 #include <rfb/KeyRemapper.h>
+#include <rfb/KeysymStr.h>
 #include <rfb/LogWriter.h>
 #include <rfb/Security.h>
 #include <rfb/ServerCore.h>
@@ -82,6 +83,7 @@ VNCServerST::VNCServerST(const char* name_, SDesktop* desktop_)
   : blHosts(&blacklist), desktop(desktop_), desktopStarted(false),
     blockCounter(0), pb(0), ledState(ledUnknown),
     name(name_), pointerClient(0), clipboardClient(0),
+    pointerClientTime(0),
     comparer(0), cursor(new Cursor(0, 0, Point(), NULL)),
     renderedCursorInvalid(false),
     keyRemapper(&KeyRemapper::defInstance),
@@ -139,11 +141,11 @@ void VNCServerST::addSocket(network::Socket* sock, bool outgoing)
       rdr::OutStream& os = sock->outStream();
 
       // Shortest possible way to tell a client it is not welcome
-      os.writeBytes("RFB 003.003\n", 12);
+      os.writeBytes((const uint8_t*)"RFB 003.003\n", 12);
       os.writeU32(0);
       const char* reason = "Too many security failures";
       os.writeU32(strlen(reason));
-      os.writeBytes(reason, strlen(reason));
+      os.writeBytes((const uint8_t*)reason, strlen(reason));
       os.flush();
     } catch (rdr::Exception&) {
     }
@@ -471,7 +473,8 @@ void VNCServerST::keyEvent(uint32_t keysym, uint32_t keycode, bool down)
     uint32_t newkey;
     newkey = keyRemapper->remapKey(keysym);
     if (newkey != keysym) {
-      slog.debug("Key remapped to 0x%x", newkey);
+      slog.debug("Key remapped to XK_%s (0x%x)",
+                 KeySymName(newkey), newkey);
       keysym = newkey;
     }
   }
@@ -482,14 +485,18 @@ void VNCServerST::keyEvent(uint32_t keysym, uint32_t keycode, bool down)
 void VNCServerST::pointerEvent(VNCSConnectionST* client,
                                const Point& pos, int buttonMask)
 {
+  time_t now = time(0);
   if (rfb::Server::maxIdleTime)
     idleTimer.start(secsToMillis(rfb::Server::maxIdleTime));
 
   // Let one client own the cursor whilst buttons are pressed in order
-  // to provide a bit more sane user experience
-  if ((pointerClient != NULL) && (pointerClient != client))
+  // to provide a bit more sane user experience. But limit the time to
+  // prevent locking out all others when e.g. the network is down.
+  if ((pointerClient != NULL) && (pointerClient != client) &&
+      ((now - pointerClientTime) < 10))
     return;
 
+  pointerClientTime = now;
   if (buttonMask)
     pointerClient = client;
   else

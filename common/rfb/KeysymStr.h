@@ -1,5 +1,4 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright 2011 Pierre Ossman for Cendio AB
+/* Copyright 2021 Pierre Ossman for Cendio AB
  * 
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,39 +16,17 @@
  * USA.
  */
 
-//
-// FdOutStream streams to a file descriptor.
-//
+#ifndef __RFB_KEYSYMSTR_H__
+#define __RFB_KEYSYMSTR_H__
 
-#ifndef __RDR_FDOUTSTREAM_H__
-#define __RDR_FDOUTSTREAM_H__
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#include <sys/time.h>
+const char* KeySymName(unsigned keysym);
 
-#include <rdr/BufferedOutStream.h>
-
-namespace rdr {
-
-  class FdOutStream : public BufferedOutStream {
-
-  public:
-
-    FdOutStream(int fd);
-    virtual ~FdOutStream();
-
-    int getFd() { return fd; }
-
-    unsigned getIdleTime();
-
-    virtual void cork(bool enable);
-
-  private:
-    virtual bool flushBuffer();
-    size_t writeFd(const uint8_t* data, size_t length);
-    int fd;
-    struct timeval lastWrite;
-  };
-
+#ifdef __cplusplus
 }
+#endif
 
 #endif

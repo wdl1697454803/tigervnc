@@ -32,6 +32,7 @@
 #include <rfb/CMsgWriter.h>
 #include <rfb/CSecurity.h>
 #include <rfb/Decoder.h>
+#include <rfb/KeysymStr.h>
 #include <rfb/Security.h>
 #include <rfb/SecurityClient.h>
 #include <rfb/CConnection.h>
@@ -163,7 +164,7 @@ bool CConnection::processVersionMsg()
   if (!is->hasData(12))
     return false;
 
-  is->readBytes(verStr, 12);
+  is->readBytes((uint8_t*)verStr, 12);
   verStr[12] = '\0';
 
   if (sscanf(verStr, "RFB %03d.%03d\n",
@@ -192,7 +193,7 @@ bool CConnection::processVersionMsg()
 
   sprintf(verStr, "RFB %03d.%03d\n",
           server.majorVersion, server.minorVersion);
-  os->writeBytes(verStr, 12);
+  os->writeBytes((const uint8_t*)verStr, 12);
   os->flush();
 
   state_ = RFBSTATE_SECURITY_TYPES;
@@ -361,7 +362,7 @@ bool CConnection::processSecurityReasonMsg()
   is->clearRestorePoint();
 
   std::vector<char> reason(len + 1);
-  is->readBytes(reason.data(), len);
+  is->readBytes((uint8_t*)reason.data(), len);
   reason[len] = '\0';
 
   state_ = RFBSTATE_INVALID;
@@ -543,7 +544,7 @@ void CConnection::serverCutText(const char* str)
 {
   hasLocalClipboard = false;
 
-  serverClipboard = latin1ToUTF8(str);
+  serverClipboard = str;
   hasRemoteClipboard = true;
 
   handleClipboardAnnounce(true);
@@ -604,6 +605,11 @@ void CConnection::handleClipboardProvide(uint32_t flags,
     return;
   }
 
+  // FIXME: This conversion magic should be in CMsgReader
+  if (!isValidUTF8((const char*)data[0], lengths[0])) {
+    vlog.error("Invalid UTF-8 sequence in clipboard - ignoring");
+    return;
+  }
   serverClipboard = convertLF((const char*)data[0], lengths[0]);
   hasRemoteClipboard = true;
 
@@ -674,6 +680,7 @@ void CConnection::announceClipboard(bool available)
 void CConnection::sendClipboardData(const char* data)
 {
   if (server.clipboardFlags() & rfb::clipboardProvide) {
+    // FIXME: This conversion magic should be in CMsgWriter
     std::string filtered(convertCRLF(data));
     size_t sizes[1] = { filtered.size() + 1 };
     const uint8_t* data[1] = { (const uint8_t*)filtered.c_str() };
@@ -690,9 +697,7 @@ void CConnection::sendClipboardData(const char* data)
 
     writer()->writeClipboardProvide(rfb::clipboardUTF8, sizes, data);
   } else {
-    std::string latin1(utf8ToLatin1(data));
-
-    writer()->writeClientCutText(latin1.c_str());
+    writer()->writeClientCutText(data);
   }
 }
 
@@ -747,7 +752,7 @@ void CConnection::setPF(const PixelFormat& pf)
   formatChange = true;
 }
 
-void CConnection::fence(uint32_t flags, unsigned len, const char data[])
+void CConnection::fence(uint32_t flags, unsigned len, const uint8_t data[])
 {
   CMsgHandler::fence(flags, len, data);
 

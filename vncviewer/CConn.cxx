@@ -55,9 +55,7 @@
 #include "win32.h"
 #endif
 
-using namespace rdr;
 using namespace rfb;
-using namespace std;
 
 static rfb::LogWriter vlog("CConn");
 
@@ -434,7 +432,7 @@ void CConn::setCursorPos(const Point& pos)
   desktop->setCursorPos(pos);
 }
 
-void CConn::fence(uint32_t flags, unsigned len, const char data[])
+void CConn::fence(uint32_t flags, unsigned len, const uint8_t data[])
 {
   CMsgHandler::fence(flags, len, data);
 

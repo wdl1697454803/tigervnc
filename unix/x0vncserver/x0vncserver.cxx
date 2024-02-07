@@ -38,6 +38,9 @@
 #include <rfb/Timer.h>
 #include <network/TcpSocket.h>
 #include <network/UnixSocket.h>
+#ifdef HAVE_LIBSYSTEMD
+#  include <systemd/sd-daemon.h>
+#endif
 
 #include <signal.h>
 #include <X11/X.h>
@@ -111,6 +114,37 @@ static bool caughtSignal = false;
 static void CleanupSignalHandler(int /*sig*/)
 {
   caughtSignal = true;
+}
+
+static bool hasSystemdListeners()
+{
+#ifdef HAVE_LIBSYSTEMD
+  // This also returns true on errors, because we then assume we were
+  // meant to use systemd but failed somewhere
+  return sd_listen_fds(0) != 0;
+#else
+  return false;
+#endif
+}
+
+static int createSystemdListeners(std::list<SocketListener*> *listeners)
+{
+#ifdef HAVE_LIBSYSTEMD
+  int count = sd_listen_fds(0);
+  if (count < 0) {
+    vlog.error("Error getting listening sockets from systemd: %s",
+               strerror(-count));
+    return count;
+  }
+
+  for (int i = 0; i < count; ++i)
+      listeners->push_back(new TcpListener(SD_LISTEN_FDS_START + i));
+
+  return count;
+#else
+  (void)listeners;
+  return 0;
+#endif
 }
 
 
@@ -252,6 +286,10 @@ int main(int argc, char** argv)
   Configuration::removeParam("SendCutText");
   Configuration::removeParam("MaxCutText");
 
+  // Assume different defaults when socket activated
+  if (hasSystemdListeners())
+    rfbport.setParam(-1);
+
   for (int i = 1; i < argc; i++) {
     if (Configuration::setParam(argv[i]))
       continue;
@@ -300,30 +338,46 @@ int main(int argc, char** argv)
 
     VNCServerST server(desktopName, &desktop);
 
+    if (createSystemdListeners(&listeners) > 0) {
+      // When systemd is in charge of listeners, do not listen to anything else
+      vlog.info("Listening on systemd sockets");
+    }
+
     if (rfbunixpath.getValueStr()[0] != '\0') {
       listeners.push_back(new network::UnixListener(rfbunixpath, rfbunixmode));
       vlog.info("Listening on %s (mode %04o)", (const char*)rfbunixpath, (int)rfbunixmode);
     }
 
     if ((int)rfbport != -1) {
+      std::list<network::SocketListener*> tcp_listeners;
       const char *addr = interface;
+
       if (strcasecmp(addr, "all") == 0)
         addr = 0;
       if (localhostOnly)
-        createLocalTcpListeners(&listeners, (int)rfbport);
+        createLocalTcpListeners(&tcp_listeners, (int)rfbport);
       else
-        createTcpListeners(&listeners, addr, (int)rfbport);
-      vlog.info("Listening for VNC connections on %s interface(s), port %d",
-                localhostOnly ? "local" : (const char*)interface,
-                (int)rfbport);
+        createTcpListeners(&tcp_listeners, addr, (int)rfbport);
+
+      if (!tcp_listeners.empty()) {
+        listeners.splice (listeners.end(), tcp_listeners);
+        vlog.info("Listening for VNC connections on %s interface(s), port %d",
+                  localhostOnly ? "local" : (const char*)interface,
+                  (int)rfbport);
+      }
+
+      FileTcpFilter fileTcpFilter(hostsFile);
+      if (strlen(hostsFile) != 0)
+        for (std::list<SocketListener*>::iterator i = listeners.begin();
+             i != listeners.end();
+             i++)
+          (*i)->setFilter(&fileTcpFilter);
     }
 
-    FileTcpFilter fileTcpFilter(hostsFile);
-    if (strlen(hostsFile) != 0)
-      for (std::list<SocketListener*>::iterator i = listeners.begin();
-           i != listeners.end();
-           i++)
-        (*i)->setFilter(&fileTcpFilter);
+    if (listeners.empty()) {
+      vlog.error("No path or port configured for incoming connections");
+      return -1;
+    }
 
     PollingScheduler sched((int)pollingCycle, (int)maxProcessorUsage);
 

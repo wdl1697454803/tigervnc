@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include <rfb/LogWriter.h>
+#include <rfb/Exception.h>
 
 #include <x0vncserver/XDesktop.h>
 
@@ -43,7 +44,6 @@
 #endif
 #ifdef HAVE_XRANDR
 #include <X11/extensions/Xrandr.h>
-#include <rfb/Exception.h>
 #include <RandrGlue.h>
 extern "C" {
 void vncSetGlueContext(Display *dpy, void *res);
@@ -52,7 +52,6 @@ void vncSetGlueContext(Display *dpy, void *res);
 #include <x0vncserver/Geometry.h>
 #include <x0vncserver/XPixelBuffer.h>
 
-using namespace std;
 using namespace rfb;
 
 extern const unsigned short code_map_qnum_to_xorgevdev[];
@@ -277,8 +276,10 @@ void XDesktop::start(VNCServer* vs) {
 void XDesktop::stop() {
   running = false;
 
+#ifdef HAVE_XTEST
   // Delete added keycodes
   deleteAddedKeysyms(dpy);
+#endif
 
 #ifdef HAVE_XDAMAGE
   if (haveDamage)
@@ -356,6 +357,9 @@ void XDesktop::pointerEvent(const Point& pos, int buttonMask) {
     }
   }
   oldButtonMask = buttonMask;
+#else
+  (void)pos;
+  (void)buttonMask;
 #endif
 }
 
@@ -397,7 +401,6 @@ KeyCode XDesktop::XkbKeysymToKeycode(Display* dpy, KeySym keysym) {
 
   return keycode;
 }
-#endif
 
 KeyCode XDesktop::addKeysym(Display* dpy, KeySym keysym)
 {
@@ -513,6 +516,7 @@ KeyCode XDesktop::keysymToKeycode(Display* dpy, KeySym keysym) {
 
   return keycode;
 }
+#endif
 
 
 void XDesktop::keyEvent(uint32_t keysym, uint32_t xtcode, bool down) {
@@ -547,6 +551,10 @@ void XDesktop::keyEvent(uint32_t keysym, uint32_t xtcode, bool down) {
   vlog.debug("%d %s", keycode, down ? "down" : "up");
 
   XTestFakeKeyEvent(dpy, keycode, down, CurrentTime);
+#else
+  (void)keysym;
+  (void)xtcode;
+  (void)down;
 #endif
 }
 
@@ -779,6 +787,9 @@ unsigned int XDesktop::setScreenLayout(int fb_width, int fb_height,
   return ret;
 
 #else
+  (void)fb_width;
+  (void)fb_height;
+  (void)layout;
   return rfb::resultProhibited;
 #endif /* HAVE_XRANDR */
 }
@@ -939,6 +950,7 @@ void XDesktop::queryRejected()
   queryConnectSock = 0;
 }
 
+#ifdef HAVE_XFIXES
 bool XDesktop::setCursor()
 {
   XFixesCursorImage *cim;
@@ -986,3 +998,4 @@ bool XDesktop::setCursor()
   XFree(cim);
   return true;
 }
+#endif

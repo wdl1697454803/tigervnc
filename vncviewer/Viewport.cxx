@@ -28,6 +28,7 @@
 #include <rfb/CMsgWriter.h>
 #include <rfb/LogWriter.h>
 #include <rfb/Exception.h>
+#include <rfb/KeysymStr.h>
 #include <rfb/ledStates.h>
 #include <rfb/util.h>
 
@@ -100,7 +101,6 @@ extern const unsigned int code_map_osx_to_qnum_len;
 
 
 using namespace rfb;
-using namespace rdr;
 
 static rfb::LogWriter vlog("Viewport");
 
@@ -121,8 +121,7 @@ Viewport::Viewport(int w, int h, const rfb::PixelFormat& /*serverPF*/, CConn* cc
 #ifdef WIN32
     altGrArmed(false),
 #endif
-    firstLEDState(true),
-    pendingServerClipboard(false), pendingClientClipboard(false),
+    firstLEDState(true), pendingClientClipboard(false),
     menuCtrlKey(false), menuAltKey(false), cursor(NULL)
 {
 #if !defined(WIN32) && !defined(__APPLE__)
@@ -296,17 +295,15 @@ void Viewport::handleClipboardAnnounce(bool available)
 
   if (!available) {
     vlog.debug("Clipboard is no longer available on server");
-    pendingServerClipboard = false;
+    return;
+  }
+
+  if (!hasFocus()) {
+    vlog.debug("Got notification of new clipboard on server whilst not focused, ignoring");
     return;
   }
 
   pendingClientClipboard = false;
-
-  if (!hasFocus()) {
-    vlog.debug("Got notification of new clipboard on server whilst not focused, will request data later");
-    pendingServerClipboard = true;
-    return;
-  }
 
   vlog.debug("Got notification of new clipboard on server, requesting data");
   cc->requestClipboard();
@@ -567,6 +564,11 @@ int Viewport::handle(int event)
 
   switch (event) {
   case FL_PASTE:
+    if (!isValidUTF8(Fl::event_text(), Fl::event_length())) {
+      vlog.error("Invalid UTF-8 sequence in system clipboard");
+      return 1;
+    }
+
     filtered = convertLF(Fl::event_text(), Fl::event_length());
 
     vlog.debug("Sending clipboard data (%d bytes)", (int)filtered.size());
@@ -754,8 +756,6 @@ void Viewport::handleClipboardChange(int source, void *data)
 
   self->clipboardSource = source;
 
-  self->pendingServerClipboard = false;
-
   if (!self->hasFocus()) {
     vlog.debug("Local clipboard changed whilst not focused, will notify server later");
     self->pendingClientClipboard = true;
@@ -776,15 +776,6 @@ void Viewport::handleClipboardChange(int source, void *data)
 
 void Viewport::flushPendingClipboard()
 {
-  if (pendingServerClipboard) {
-    vlog.debug("Focus regained after remote clipboard change, requesting data");
-    try {
-      cc->requestClipboard();
-    } catch (rdr::Exception& e) {
-      vlog.error("%s", e.str());
-      abort_connection_with_unexpected_error(e);
-    }
-  }
   if (pendingClientClipboard) {
     vlog.debug("Focus regained after local clipboard change, notifying server");
     try {
@@ -795,7 +786,6 @@ void Viewport::flushPendingClipboard()
     }
   }
 
-  pendingServerClipboard = false;
   pendingClientClipboard = false;
 }
 
@@ -878,12 +868,8 @@ void Viewport::handleKeyPress(int keyCode, uint32_t keySym)
   // and send the same on release.
   downKeySym[keyCode] = keySym;
 
-#if defined(WIN32) || defined(__APPLE__)
-  vlog.debug("Key pressed: 0x%04x => 0x%04x", keyCode, keySym);
-#else
   vlog.debug("Key pressed: 0x%04x => XK_%s (0x%04x)",
-             keyCode, XKeysymToString(keySym), keySym);
-#endif
+             keyCode, KeySymName(keySym), keySym);
 
   try {
     // Fake keycode?
@@ -913,12 +899,8 @@ void Viewport::handleKeyRelease(int keyCode)
     return;
   }
 
-#if defined(WIN32) || defined(__APPLE__)
-  vlog.debug("Key released: 0x%04x => 0x%04x", keyCode, iter->second);
-#else
   vlog.debug("Key released: 0x%04x => XK_%s (0x%04x)",
-             keyCode, XKeysymToString(iter->second), iter->second);
-#endif
+             keyCode, KeySymName(iter->second), iter->second);
 
   try {
     if (keyCode > 0xff)
@@ -1244,7 +1226,7 @@ void Viewport::initContextMenu()
 {
   contextMenu->clear();
 
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "Dis&connect"),
+  fltk_menu_add(contextMenu, p_("ContextMenu|", "Disconn&ect"),
                 0, NULL, (void*)ID_DISCONNECT, FL_MENU_DIVIDER);
 
   fltk_menu_add(contextMenu, p_("ContextMenu|", "&Full screen"),

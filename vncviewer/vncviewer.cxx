@@ -84,7 +84,6 @@ static rfb::LogWriter vlog("main");
 
 using namespace network;
 using namespace rfb;
-using namespace std;
 
 char vncServerName[VNCSERVERNAMELEN] = { '\0' };
 
@@ -107,7 +106,7 @@ static const char *about_text()
              "Built on: %s\n"
              "Copyright (C) 1999-%d TigerVNC Team and many others (see README.rst)\n"
              "See https://www.tigervnc.org for information on TigerVNC."),
-           PACKAGE_VERSION, BUILD_TIMESTAMP, 2022);
+           PACKAGE_VERSION, BUILD_TIMESTAMP, 2024);
 
   return buffer;
 }
@@ -757,6 +756,8 @@ int main(int argc, char** argv)
         port = atoi(vncServerName);
 
       createTcpListeners(&listeners, 0, port);
+      if (listeners.empty())
+        throw Exception(_("Unable to listen for incoming connections"));
 
       vlog.info(_("Listening on port %d"), port);
 
